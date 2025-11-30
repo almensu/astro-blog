@@ -70,3 +70,6 @@ Enjoy it!
 | `pnpm build`   | Build your production site to `./dist/`      |
 | `pnpm preview` | Preview your build locally, before deploying |
 | `pnpm format`  | Format code using Prettier                   |
+
+npm run dev 预览
+使用 npm run build
