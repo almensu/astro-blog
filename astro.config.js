@@ -21,7 +21,6 @@ import swup from '@swup/astro'
 // https://astro.build/config
 export default defineConfig({
   site: site.url,
-  base: '/astro-blog',
   integrations: [
     tailwind(),
     react(),
