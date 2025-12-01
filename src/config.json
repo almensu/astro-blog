@@ -1,20 +1,20 @@
 {
   "site": {
     "url": "https://blog.yanghoo205.com",
-    "title": "yanghoo205",
+    "title": "Yanghoo205",
     "description": "这是一个使用 Astro 和 React 开发的博客主题。",
-    "keywords": "yanghoo,博客",
+    "keywords": "Yanghoo205,博客",
     "lang": "zh-CN",
     "favicon": "/favicon.ico",
     "appleTouchIcon": "/apple-touch-icon.png"
   },
   "author": {
-    "name": "yanghoo205",
+    "name": "Yanghoo205",
     "twitterId": "@yanghoo205",
     "avatar": "/yanghoo-img.png"
   },
   "hero": {
-    "name": "yanghoo205",
+    "name": "Yanghoo205",
     "bio": "没什么改变世界的宏愿，只是想在 AI 的协助下，顺便用代码给世界修修补补——主要是修补我自己",
     "description": "Vibe Coding.",
     "socials": [
