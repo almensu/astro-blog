@@ -1,4 +1,4 @@
-import { sponsor, site } from '@/config.json'
+import { sponsor, site, author, hero } from '@/config.json'
 import { motion } from 'framer-motion'
 import * as QR from 'qrcode.react'
 import { useAtomValue } from 'jotai'
@@ -6,6 +6,8 @@ import { metaSlugAtom, metaTitleAtom } from '@/store/metaInfo'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { useModal } from '@/components/ui/modal'
+import { useEffect, useRef, useState } from 'react'
+import html2canvas from 'html2canvas'
 
 interface ShareData {
   url: string
@@ -50,13 +52,27 @@ function ShareButton() {
   const postSlug = useAtomValue(metaSlugAtom)
   const postTitle = useAtomValue(metaTitleAtom)
   const { present } = useModal()
+  const [selectedText, setSelectedText] = useState('')
+
+  useEffect(() => {
+    const handleSelection = () => {
+      const selection = window.getSelection()
+      if (selection && selection.toString().trim().length > 0) {
+        setSelectedText(selection.toString().trim())
+      } else {
+        setSelectedText('')
+      }
+    }
+    document.addEventListener('selectionchange', handleSelection)
+    return () => document.removeEventListener('selectionchange', handleSelection)
+  }, [])
 
   const url = new URL(postSlug, site.url).href
-  const text = `嘿，我发现了一片宝藏文章「${postTitle}」哩，快来看看吧！`
+  const defaultText = `嘿，我发现了一片宝藏文章「${postTitle}」哩，快来看看吧！`
 
   const openModal = () => {
     present({
-      content: <ShareModal url={url} text={text} />,
+      content: <ShareModal url={url} text={selectedText || defaultText} isSelection={!!selectedText} />,
     })
   }
 
@@ -72,7 +88,88 @@ function ShareButton() {
   )
 }
 
-function ShareModal({ url, text }: { url: string; text: string }) {
+function ShareModal({ url, text, isSelection }: { url: string; text: string; isSelection: boolean }) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [generating, setGenerating] = useState(false)
+
+  const downloadCard = async () => {
+    if (!cardRef.current) return
+    setGenerating(true)
+    try {
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2, // Better quality
+        useCORS: true,
+      })
+      const image = canvas.toDataURL('image/png')
+      const link = document.createElement('a')
+      link.href = image
+      link.download = `share-${Date.now()}.png`
+      link.click()
+    } catch (error) {
+      console.error('Failed to generate share card', error)
+      toast.error('生成分享卡片失败')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  if (isSelection) {
+    return (
+      <motion.div
+        className="bg-transparent flex flex-col items-center gap-4"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+      >
+        <div
+          ref={cardRef}
+          className="bg-[#f8f8f8] p-8 w-[375px] text-[#333] flex flex-col gap-8 font-serif shadow-2xl"
+          style={{
+             backgroundImage: 'linear-gradient(to bottom, #fafafa, #f0f0f0)'
+          }}
+        >
+          <div className="text-lg leading-relaxed whitespace-pre-wrap tracking-wide text-justify opacity-90">
+            {text}
+          </div>
+          
+          <div className="mt-auto flex items-end justify-between pt-6 border-t border-black/5">
+            <div className="flex items-center gap-3">
+              <img 
+                src={author.avatar} 
+                alt={author.name} 
+                className="size-10 rounded-full object-cover border border-white/50"
+                crossOrigin="anonymous"
+              />
+              <div className="flex flex-col">
+                <span className="font-bold text-sm">{author.name}</span>
+                <span className="text-[10px] text-gray-500 max-w-[120px] leading-tight opacity-80">{hero.bio}</span>
+              </div>
+            </div>
+            <div className="bg-white p-1 rounded-sm">
+              <QR.QRCodeSVG value={url} size={50} level="M" />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-4">
+          <button
+            onClick={downloadCard}
+            disabled={generating}
+            className="bg-white text-black px-6 py-2 rounded-full font-medium hover:bg-gray-100 transition-colors shadow-lg flex items-center gap-2"
+          >
+            {generating ? (
+              <i className="iconfont icon-loader animate-spin"></i>
+            ) : (
+              <i className="iconfont icon-download"></i>
+            )}
+            保存卡片
+          </button>
+        </div>
+      </motion.div>
+    )
+  }
+
   return (
     <motion.div
       className="bg-primary rounded-lg p-2 min-w-[420px] border border-primary flex flex-col"

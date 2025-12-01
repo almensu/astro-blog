@@ -33,6 +33,7 @@
     "clsx": "^2.1.0",
     "framer-motion": "^11.1.5",
     "hastscript": "^9.0.0",
+    "html2canvas": "^1.4.1",
     "jotai": "^2.8.0",
     "katex": "^0.16.10",
     "lodash-es": "^4.17.21",
