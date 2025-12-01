@@ -74,59 +74,59 @@ function ShareButton() {
       const selectedStr = selection.toString()
       setSelectedText(selectedStr.trim())
 
-      // Try to find context
-      let container = range.commonAncestorContainer
-      // If container is text node, get its parent
-      const block = container.nodeType === 3 ? container.parentElement : (container as HTMLElement)
+      // Helper to capture context across DOM nodes
+      const getContext = (isPre: boolean, range: Range, maxLength: number = 30) => {
+        const walker = document.createTreeWalker(
+          document.body,
+          NodeFilter.SHOW_TEXT,
+          {
+            acceptNode: (node) => {
+              const parent = node.parentElement
+              if (parent && ['SCRIPT', 'STYLE', 'NOSCRIPT', 'HEAD', 'META', 'BUTTON', 'NAV'].includes(parent.tagName)) {
+                return NodeFilter.FILTER_REJECT
+              }
+              return NodeFilter.FILTER_ACCEPT
+            }
+          }
+        )
 
-      if (block) {
-        // Find the nearest block-level element that contains the selection
-        let pNode = block
-        while (
-          pNode &&
-          pNode.tagName !== 'P' &&
-          pNode.tagName !== 'DIV' &&
-          pNode.tagName !== 'LI' &&
-          pNode.tagName !== 'BLOCKQUOTE' &&
-          pNode !== document.body
-        ) {
-          pNode = pNode.parentElement as HTMLElement
-        }
+        // Initialize walker
+        walker.currentNode = isPre ? range.startContainer : range.endContainer
+        let text = ''
 
-        if (pNode) {
-          // Simple approach: Get full text and try to split by selection
-          // Note: This is not perfect if the selection appears multiple times, 
-          // but for a simple blog post selection it's usually sufficient.
-          const fullText = pNode.textContent || ''
-          
-          // We use a simpler heuristic: capture X chars before and after the selection
-          // based on the range offsets relative to the block.
-          // Since mapping range offsets to textContent indices is complex due to nested nodes,
-          // we will fallback to just using the textContent and finding the selected string.
-          // To make it more robust against duplicates, we could try to use the surrounding text nodes.
-          
-          // For now, let's try to locate the selected string in the full text.
-          // If there are multiple occurrences, we might pick the wrong one, but it's a trade-off for simplicity.
-          const idx = fullText.indexOf(selectedStr)
-          if (idx !== -1) {
-            const preText = fullText.slice(0, idx)
-            const postText = fullText.slice(idx + selectedStr.length)
-            
-            setContextData({
-              pre: preText.slice(-60), // Last 60 chars
-              highlight: selectedStr,
-              post: postText.slice(0, 60), // First 60 chars
-            })
-            return
+        // Capture text from the start/end container itself
+        if (isPre) {
+          if (range.startContainer.nodeType === Node.TEXT_NODE) {
+            text = range.startContainer.textContent?.substring(0, range.startOffset) || ''
+          }
+        } else {
+          if (range.endContainer.nodeType === Node.TEXT_NODE) {
+            text = range.endContainer.textContent?.substring(range.endOffset) || ''
           }
         }
+
+        // Walk to gather more text
+        while (text.length < maxLength) {
+          const nextNode = isPre ? walker.previousNode() : walker.nextNode()
+          if (!nextNode) break
+          
+          const content = nextNode.textContent || ''
+          if (isPre) {
+            text = content + text
+          } else {
+            text = text + content
+          }
+        }
+
+        return isPre ? text.slice(-maxLength) : text.slice(0, maxLength)
       }
-      
-      // Fallback if we can't find context
+
+      const clean = (s: string) => s.replace(/\s+/g, ' ').trim()
+
       setContextData({
-        pre: '',
-        highlight: selectedStr,
-        post: '',
+        pre: clean(getContext(true, range)),
+        highlight: selectedStr, // Keep raw for pre-wrap display
+        post: clean(getContext(false, range)),
       })
     }
     document.addEventListener('selectionchange', handleSelection)
@@ -182,14 +182,26 @@ function ShareModal({
     if (!cardRef.current) return
     setGenerating(true)
     try {
-      // Wait a bit for fonts and images
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      // Wait a bit for fonts and images to ensure proper rendering
+      await new Promise((resolve) => setTimeout(resolve, 600))
+      
+      // Force fonts to load before capturing
+      document.fonts.ready.then(() => {
+        console.log('All fonts loaded')
+      })
+      
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#f8f8f8', // Match the card background
         scale: 3, // High Definition
         useCORS: true,
         logging: false,
         allowTaint: true,
+        onclone: (clonedDoc) => {
+          // Ensure fonts are loaded in the cloned document
+          clonedDoc.fonts.ready.then(() => {
+            console.log('Cloned document fonts ready')
+          })
+        }
       })
       const image = canvas.toDataURL('image/png')
       const link = document.createElement('a')
@@ -214,47 +226,69 @@ function ShareModal({
       >
         <div
           ref={cardRef}
-          className="bg-[#f8f8f8] p-8 w-[375px] text-[#333] flex flex-col gap-8 font-serif shadow-2xl relative overflow-hidden"
+          className="bg-[#f8f8f8] p-8 w-[375px] text-[#333] flex flex-col gap-0 font-serif shadow-2xl relative overflow-hidden"
           style={{
             backgroundImage: 'linear-gradient(to bottom, #fafafa, #f0f0f0)',
           }}
         >
-          <div className="relative z-10">
-            <div className="text-lg leading-relaxed text-justify">
-              {contextData ? (
-                <>
-                  <span className="opacity-40 text-base">{contextData.pre}</span>
-                  <span className="font-bold mx-1">{contextData.highlight}</span>
-                  <span className="opacity-40 text-base">{contextData.post}</span>
-                </>
-              ) : (
-                text
-              )}
-            </div>
-          </div>
+          <div className="relative z-10 pb-8">
+             <div className="text-lg leading-relaxed text-justify relative">
+               {contextData ? (
+                 <>
+                   {/* Pre Text - Top Fade */}
+                   <div className="text-gray-400 relative">
+                     <span>{contextData.pre}</span>
+                     <div 
+                       className="absolute inset-x-0 -top-2 bottom-0 pointer-events-none"
+                       style={{ background: 'linear-gradient(to bottom, rgba(248,248,248,0.9) 0%, rgba(248,248,248,0) 100%)' }}
+                     />
+                   </div>
+                   
+                   {/* Highlight Text */}
+                   <div className="font-bold text-gray-900 whitespace-pre-wrap my-0">{contextData.highlight}</div>
+                   
+                   {/* Post Text - Bottom Fade */}
+                   <div className="text-gray-400 relative">
+                     <span>{contextData.post}</span>
+                     <div 
+                       className="absolute top-0 -bottom-8 pointer-events-none"
+                       style={{ 
+                         left: '-32px',
+                         right: '-32px',
+                         background: 'linear-gradient(to top, rgba(248,248,248,1) 0%, rgba(248,248,248,0) 100%)' 
+                       }}
+                     />
+                   </div>
+                 </>
+               ) : (
+                 text
+               )}
+             </div>
+           </div>
 
           {/* Decorative quote mark */}
           <div className="absolute top-4 left-4 text-6xl text-black/5 font-serif leading-none select-none pointer-events-none">
             “
           </div>
           
-          <div className="mt-auto flex items-end justify-between pt-6 border-t border-black/5">
+          <div className="mt-auto flex items-end justify-between pt-6 border-t border-black/5" style={{ minHeight: '60px' }}>
             <div className="flex items-center gap-3">
               <img 
                 src={author.avatar} 
                 alt={author.name} 
-                className="size-10 rounded-full object-cover border border-white/50"
+                className="size-12 rounded-full object-cover border border-white/50"
                 crossOrigin="anonymous"
+                onLoad={() => console.log('Avatar loaded')}
               />
-              <div className="flex flex-col max-w-[180px]">
-                <span className="font-bold text-sm">{author.name}</span>
-                <span className="text-[10px] text-gray-500 leading-tight opacity-80 line-clamp-2">
+              <div className="flex flex-col max-w-[180px]" style={{ lineHeight: '1.2' }}>
+                <span className="font-bold text-sm text-gray-900 leading-none">{author.name}</span>
+                <span className="text-xs text-gray-500 opacity-90 mt-1 leading-none">
                   {postTitle || hero.bio}
                 </span>
               </div>
             </div>
-            <div className="bg-white p-1 rounded-sm shadow-sm">
-              <QR.QRCodeSVG value={url} size={55} level="M" />
+            <div className="bg-white p-1 rounded-sm shadow-sm shrink-0 flex items-center justify-center" style={{ height: '42px', width: '42px' }}>
+              <QR.QRCodeSVG value={url} size={40} level="M" />
             </div>
           </div>
         </div>
